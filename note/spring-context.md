@@ -4,7 +4,7 @@
 
 - [开头](#%E5%BC%80%E5%A4%B4)
 - [annotation-config](#annotation-config)
-  - [BeanPostProcessor注册](#beanpostprocessor%E6%B3%A8%E5%86%8C)
+  - [BeanPostProcessor注册](#BeanpostProcessor注册)
     - [AnnotationAwareOrderComparator](#annotationawareordercomparator)
     - [ContextAnnotationAutowireCandidateResolver](#contextannotationautowirecandidateresolver)
     - [ConfigurationClassPostProcessor](#configurationclasspostprocessor)
@@ -14,8 +14,8 @@
     - [PersistenceAnnotationBeanPostProcessor](#persistenceannotationbeanpostprocessor)
     - [EventListenerMethodProcessor](#eventlistenermethodprocessor)
     - [DefaultEventListenerFactory](#defaulteventlistenerfactory)
-  - [逻辑关系整理](#%E9%80%BB%E8%BE%91%E5%85%B3%E7%B3%BB%E6%95%B4%E7%90%86)
-  - [运行](#%E8%BF%90%E8%A1%8C)
+  - [逻辑关系整理](#逻辑关系整理)
+  - [运行](#运行)
     - [ConfigurationClassPostProcessor](#configurationclasspostprocessor-1)
       - [postProcessBeanDefinitionRegistry](#postprocessbeandefinitionregistry)
         - [BeanPostProcessor注册](#beanpostprocessor%E6%B3%A8%E5%86%8C-1)
@@ -284,13 +284,36 @@ public static Set<BeanDefinitionHolder> registerAnnotationConfigProcessors(
 
 ### ConfigurationClassPostProcessor
 
-此类用于处理标注了@Configuration注解的类。类图:
+此类用于处理标注了@Configuration和@Component注解的类，并且加载其中的@Bean方法定义的bean。
+
+通过@bean方法定义的bean，其实例化是采用配置类作为factorybean，配置类的方法作为facrotyMethod生成。
+spring会使用cglib代理@Configuration配置类的bean，保证其@Bean方法相互调用时，也只生成相同的bean，这叫做full 模式。
+类图:
 
 ![ConfigurationClassPostProcessor类图](images/ConfigurationClassPostProcessor.jpg)
 
 ### AutowiredAnnotationBeanPostProcessor
 
-此类便用于对标注了@Autowire等注解的bean或是方法进行注入。
+此类用于对标注了@Autowired 和@Value等注解的bean或是方法进行注入。
+- applyMergedBeanDefinitionPostProcessors 会扫描bean的Field和方法，找到@Autowired和@Value注解，然后在postProcessPropertyValues方法中通过反射注入依赖
+- determineCandidateConstructors：找到bean的候选构造函数进行自动注入，优先使用唯一的autowired注解的构造函数，若均无autowired注解，则找到唯一的构造函数。
+```java
+	public PropertyValues postProcessPropertyValues(
+			PropertyValues pvs, PropertyDescriptor[] pds, Object bean, String beanName) throws BeanCreationException {
+
+		InjectionMetadata metadata = findAutowiringMetadata(beanName, bean.getClass(), pvs);
+		try {
+			metadata.inject(bean, beanName, pvs);
+		}
+		catch (BeanCreationException ex) {
+			throw ex;
+		}
+		catch (Throwable ex) {
+			throw new BeanCreationException(beanName, "Injection of autowired dependencies failed", ex);
+		}
+		return pvs;
+	
+```
 
 ![AutowiredAnnotationBeanPostProcessor类图](images/AutowiredAnnotationBeanPostProcessor.jpg)
 
