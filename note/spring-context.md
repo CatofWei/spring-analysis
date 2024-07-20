@@ -21,7 +21,7 @@
         - [BeanPostProcessor注册](#beanpostprocessor%E6%B3%A8%E5%86%8C-1)
           - [ImportAwareBeanPostProcessor](#importawarebeanpostprocessor)
           - [EnhancedConfigurationBeanPostProcessor](#enhancedconfigurationbeanpostprocessor)
-        - [类解析](#%E7%B1%BB%E8%A7%A3%E6%9E%90)
+        - [类解析](#类解析)
           - [bean名字生成策略](#bean%E5%90%8D%E5%AD%97%E7%94%9F%E6%88%90%E7%AD%96%E7%95%A5)
       - [postProcessBeanFactory](#postprocessbeanfactory)
     - [AutowiredAnnotationBeanPostProcessor](#autowiredannotationbeanpostprocessor-1)
@@ -283,8 +283,8 @@ public static Set<BeanDefinitionHolder> registerAnnotationConfigProcessors(
 ![ContextAnnotationAutowireCandidateResolver类图](images/ContextAnnotationAutowireCandidateResolver.jpg)
 
 ### ConfigurationClassPostProcessor
-
-此类用于处理标注了@Configuration和@Component注解的类，并且加载其中的@Bean方法定义的bean。
+- postProcessBeanDefinitionRegistry：处理标注了@Configuration和@Component注解的类，
+并且加载其中的@Bean方法定义的bean，生成BeanDefinition加入Beanfactory中
 
 通过@bean方法定义的bean，其实例化是采用配置类作为factorybean，配置类的方法作为facrotyMethod生成。
 spring会使用cglib代理@Configuration配置类的bean，保证其@Bean方法相互调用时，也只生成相同的bean，这叫做full 模式。

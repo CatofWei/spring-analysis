@@ -2,19 +2,19 @@
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
-- [基本](#%E5%9F%BA%E6%9C%AC)
-  - [ClassPathXmlApplicationContext](#classpathxmlapplicationcontext)
-    - [构造器](#%E6%9E%84%E9%80%A0%E5%99%A8)
-    - [设置配置文件路径](#%E8%AE%BE%E7%BD%AE%E9%85%8D%E7%BD%AE%E6%96%87%E4%BB%B6%E8%B7%AF%E5%BE%84)
-      - [Environment接口](#environment%E6%8E%A5%E5%8F%A3)
+- [基本](#基本)
+  - [ClassPathXmlApplicationContext](#ClassPathXmlApplicationContext)
+    - [构造器](#构造器)
+    - [设置配置文件路径](#设置配置文件路径)
+      - [Environment接口](#environment接口)
         - [Profile](#profile)
         - [Property](#property)
-      - [Environment构造器](#environment%E6%9E%84%E9%80%A0%E5%99%A8)
-        - [PropertySources接口](#propertysources%E6%8E%A5%E5%8F%A3)
-        - [PropertySource接口](#propertysource%E6%8E%A5%E5%8F%A3)
-      - [路径Placeholder处理](#%E8%B7%AF%E5%BE%84placeholder%E5%A4%84%E7%90%86)
-        - [PropertyResolver接口](#propertyresolver%E6%8E%A5%E5%8F%A3)
-        - [解析](#%E8%A7%A3%E6%9E%90)
+      - [Environment构造器](#environment构造器)
+        - [PropertySources接口](#propertysources接口)
+        - [PropertySource接口](#propertysource接口)
+      - [路径Placeholder处理](#路径placeholder处理)
+        - [PropertyResolver接口](#propertyresolver接口)
+        - [解析](#解析)
   - [refresh](#refresh)
     - [prepareRefresh](#preparerefresh)
       - [属性校验](#%E5%B1%9E%E6%80%A7%E6%A0%A1%E9%AA%8C)
@@ -142,8 +142,9 @@ public class SimpleBean {
       - Map<String, BeanDefinition> beanDefinitionMap： 保存加载的beanDefinition
       - List<String> beanDefinitionNames： 保存加载的bean名字
       - singletonObjects：一级缓存，用于存放完全初始化好的bean
-      - earlySingletonObjects: 二级缓存，里面是尚未完成属性注入的bean，并且被循环引用锅
+      - earlySingletonObjects: 二级缓存，里面是尚未完成属性注入的bean，并且被循环引用过
       - singletonFactories: 三级缓存，里面是尚未完成属性注入的bean
+      - beanPostProcessors：存放bean后置处理器
       
 
 整个继承体系如下:
@@ -216,7 +217,7 @@ protected String resolvePath(String path) {
 }
 ```
 
-此方法的目的在于将占位符(placeholder)解析成实际的地址。比如可以这么写: `new ClassPathXmlApplicationContext("classpath:config.xml");`那么classpath:就是需要被解析的。
+此方法的目的在于将占位符(placeholder)解析成实际的地址。比如可以这么写: `new ClassPathXmlApplicationContext("classpath:${dev}config.xml");`那么${dev}就是需要被解析的。
 
 getEnvironment方法来自于ConfigurableApplicationContext接口，源码很简单，如果为空就调用createEnvironment创建一个。AbstractApplicationContext.createEnvironment:
 
@@ -440,6 +441,67 @@ protected <T> T getProperty(String key, Class<T> targetValueType, boolean resolv
 Spring bean解析就在此方法，所以单独提出来。
 
 AbstractApplicationContext.refresh:
+
+refersh流程概述：
+- prepareRefresh
+  - getEnvironment
+    - createEnvironment:创建Environment，加载系统参数和环境变量
+- obtainFreshBeanFactory
+  - refreshBeanFactory
+    - createBeanFactory: 创建beanFactory
+    - loadBeanDefinitions：从配置文件中加载bean定义
+- prepareBeanFactory: 手工注册一些spring内部的特殊bean和依赖
+- invokeBeanFactoryPostProcessors：BeanFactory的后置处理
+  - invokeBeanDefinitionRegistryPostProcessors：调用BeanDefinitionRegistryPostProcessor#postProcessBeanDefinitionRegistry(..)方法，通常是用于增删改bean定义
+    - ConfigurationClassPostProcessor：这个处理器的作用是解析@Configuration和@Component注解的类，处理其中的@Bean方法，生成BeanDefinition并加入BeanFactory中
+  - invokeBeanFactoryPostProcessors：调用BeanFactoryPostProcessor#postProcessBeanFactory(..)
+    - ConfigurationClassPostProcessor: 作用是增强@Configuration注解的类，使其@Bean方法调用返回相同的bean
+- registerBeanPostProcessors：注册Bean后置处理器,从bean定义中扫描BeanPostProcessor，放入BeanFactory中
+- initApplicationEventMulticaster：初始化消息广播器并注册到BeanFactory中
+- registerListeners：将ApplicationListener bean注册到广播器中
+- finishBeanFactoryInitialization：根据BeanDefinitionNames初始化所有非懒加载的bean
+- finishRefresh
+  - initLifecycleProcessor
+  - getLifecycleProcessor().onRefresh()
+  - publishEvent(new ContextRefreshedEvent(this)): 发布ContextRefreshedEvent
+
+getBean流程概述：
+- doGetBean：
+  - getSingleton(beanName)：
+    - 逻辑：从缓存中拿bean。首先从第一级缓存singletonObjects中拿，若有则返回，若无且该bean正在创建中，则从第二级缓存earlySingletonObjects获取bean。
+     若不为空则返回，若为空则从第三级缓存singletonFactories中获取bean，然后转移到第二级缓存中（从三中删除，添加到二中）
+    - 作用：若缓存中有bean，则直接返回，不继续创建bean了，并且通过三级缓存可支持bean的循环引用。
+  - getDependsOn：先创建该bean的依赖bean
+  - getSingleton(beanName, ObjectFactory)：从第一级缓存中拿，有则返回，否则继续创建。
+    - beforeSingletonCreation:beanName添加到singletonsCurrentlyInCreation，表示该bean正在创建
+    - createBean: 从合并了父BeanDefinition的BeanDefinition中创建bean
+      - resolveBeforeInstantiation：实例化前处理，若返回对象不为null，则直接返回该对象作为bean。
+        - applyBeanPostProcessorsBeforeInstantiation：调用InstantiationAwareBeanPostProcessor#postProcessBeforeInstantiation，返回的对象会取代目标bean实例。若返回对象不为null，则bean创建会短路，跳到BeanPostProcessor#postProcessAfterInitialization的处理。
+      - doCreateBean：
+        - createBeanInstance：通过反射创建bean实例
+          - determineConstructorsFromBeanPostProcessors：若在此之前没有指定好构造函数，则调用SmartInstantiationAwareBeanPostProcessor#determineCandidateConstructors(..) 来确定所用的构造函数
+            - AutowiredAnnotationBeanPostProcessor： 这个BPP会找到合适的构造函数。去找唯一的@Autowired注解的构造函数，或者唯一的构造函数。
+        - applyMergedBeanDefinitionPostProcessors：调用MergedBeanDefinitionPostProcessor#postProcessMergedBeanDefinition()方法，处理合并后的BeanDefinition
+          - AutowiredAnnotationBeanPostProcessor：扫描bean的Field和Method，找到@Autowired和@Value注解，保存起来
+          - CommonAnnotationBeanPostProcessor：扫描bean的Field和Method，找到@Resource等通用注解，保存起来
+        - addSingletonFactory: 把正在创建的bean放入第三级缓存中，以支持潜在的循环引用
+        - populateBean：对bean进行属性注入
+          - InstantiationAwareBeanPostProcessor#postProcessAfterInstantiation：在属性注入前进行处理，若返回false则不继续进行属性注入
+          - autowireByName：若开启了按name的自动装配，则按照name解析缺失的property，并放入BeanDefinition的propertyValues中
+          - autowireByType: 若开启了按type的自动装配，则按照type解析缺失的property，并放入BeanDefinition的propertyValues中
+          - InstantiationAwareBeanPostProcessor#postProcessPropertyValues: 处理PropertyValues
+            - AutowiredAnnotationBeanPostProcessor：注入先前扫描到的Field和Method
+            - CommonAnnotationBeanPostProcessor：注入先前扫描到的Field和Method
+          - applyPropertyValues：属性注入
+        - initializeBean：初始化
+          - invokeAwareMethods：处理BeanNameAware，BeanClassLoaderAware，BeanFactoryAware
+          - applyBeanPostProcessorsBeforeInitialization：调用BeanPostProcessor#postProcessBeforeInitialization()，初始化前处理
+            - ApplicationContextAwareProcessor：处理spring常见的aware
+          - invokeInitMethods：先执行InitializingBean#afterPropertiesSet，再调用init-method
+          - applyBeanPostProcessorsAfterInitialization：调用BeanPostProcessor#postProcessAfterInitialization
+        - registerDisposableBeanIfNecessary：注册bean destroy方法
+    - afterSingletonCreation：将beanName从singletonsCurrentlyInCreation移除
+    - addSingleton：将bean添加到第一级缓存，从第二、第三级中移除
 
 ```java
 @Override

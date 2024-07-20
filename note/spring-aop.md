@@ -44,7 +44,7 @@
   - [解析](#%E8%A7%A3%E6%9E%90-1)
     - [入口](#%E5%85%A5%E5%8F%A3-1)
     - [装饰](#%E8%A3%85%E9%A5%B0)
-  - [代理生成](#%E4%BB%A3%E7%90%86%E7%94%9F%E6%88%90)
+  - [代理生成](#代理生成)
     - [Advisor](#advisor)
     - [引入](#%E5%BC%95%E5%85%A5-1)
   - [例子](#%E4%BE%8B%E5%AD%90)
@@ -78,7 +78,6 @@
 # 开头
 
 aop部分的解析器由AopNamespaceHandler注册，其init方法:
-
 ```java
 @Override
 public void init() {
@@ -87,6 +86,12 @@ public void init() {
     registerBeanDefinitionDecorator("scoped-proxy", new ScopedProxyBeanDefinitionDecorator());
 }
 ```
+
+# spring AOP的概念
+- advice：通知，就是抽取出来的通用逻辑
+- joinPoint：连接点，就是可以引用通知的地方，spring仅支持方法连接点
+- pointcut：切入点，也就是希望让通知生效的连接点
+- aspect：通知和切入点共同构成切面
 
 # aop:config
 
